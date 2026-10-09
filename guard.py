@@ -11,11 +11,8 @@ class TruncationError(RuntimeError):
 
 
 def estimate_tokens(text, chars_per_token=6.0):
-    """Return a LOWER bound on the token count of text.
-
-    English prose runs nearer 4 characters per token, so 6.0 is deliberately
-    generous. Dividing by it under-counts, so estimation error alone cannot
-    make an honest prompt look truncated.
+    """Return a LOWER bound on tokens. Prose runs nearer 4 characters per token,
+    so 6.0 under-counts on purpose and estimation error alone cannot flag an honest prompt.
     """
     return int(len(text) / chars_per_token)
 
