@@ -1,0 +1,7 @@
+[project]
+name = "ollama-truncation-guard"
+version = "0.1.0"
+description = "A localhost proxy that refuses Ollama answers built on a silently truncated prompt."
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = []

@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Blocks commit messages that hold private terms or secrets.
+set -uo pipefail
+. "$(git rev-parse --show-toplevel)/scripts/hooks/scan-lib.sh" || exit 1
+denylist_ok || exit 1
+
+if ! scan_text "commit message" < "$1"; then
+  echo "Commit refused. Reword the message." >&2
+  exit 1
+fi

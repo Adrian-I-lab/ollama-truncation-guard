@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Blocks commits whose added lines or file paths hold private terms or secrets.
+set -uo pipefail
+. "$(git rev-parse --show-toplevel)/scripts/hooks/scan-lib.sh" || exit 1
+denylist_ok || exit 1
+
+status=0
+git diff --cached --name-only --diff-filter=ACMR | scan_text "staged file paths" || status=1
+while IFS= read -r -d '' f; do
+  git diff --cached -U0 --no-color -- "$f" | grep '^+' | grep -v '^+++ ' | cut -c2- \
+    | scan_text "$f" || status=1
+done < <(git diff --cached --name-only --diff-filter=ACMR -z)
+
+[ "$status" -eq 0 ] || echo "Commit refused. Fix the content, never the hook." >&2
+exit "$status"
