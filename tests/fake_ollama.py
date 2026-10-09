@@ -6,6 +6,7 @@ Tokens are counted as len(text) // 4. Knobs:
   truncate_to=<int>   always report that number
   drop_count=True     omit prompt_eval_count entirely
 """
+import argparse
 import json
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -70,13 +71,28 @@ def _handler(truncate_to, drop_count, calls):
     return Handler
 
 
-def start_fake(truncate_to=None, drop_count=False):
-    """Start the fake on 127.0.0.1 with a free port. Returns (server, base_url).
+def start_fake(truncate_to=None, drop_count=False, port=0):
+    """Start the fake on 127.0.0.1 (port 0 picks a free port). Returns (server, base_url).
 
     server.calls lists the generate and chat paths received. Stop with server.shutdown().
     """
     calls = []
-    server = ThreadingHTTPServer(("127.0.0.1", 0), _handler(truncate_to, drop_count, calls))
+    server = ThreadingHTTPServer(("127.0.0.1", port), _handler(truncate_to, drop_count, calls))
     server.calls = calls
     threading.Thread(target=server.serve_forever, args=(0.05,), daemon=True).start()
     return server, f"http://127.0.0.1:{server.server_address[1]}"
+
+
+if __name__ == "__main__":
+    p = argparse.ArgumentParser(description="Run the fake Ollama server for demos.")
+    p.add_argument("--port", type=int, default=11434)
+    p.add_argument("--truncate-to", default=None, help='"half" or an integer')
+    p.add_argument("--drop-count", action="store_true")
+    a = p.parse_args()
+    cut = a.truncate_to if a.truncate_to in (None, "half") else int(a.truncate_to)
+    srv, url = start_fake(cut, a.drop_count, a.port)
+    print(f"fake Ollama on {url} truncate_to={cut}", flush=True)
+    try:
+        threading.Event().wait()
+    except KeyboardInterrupt:
+        srv.shutdown()

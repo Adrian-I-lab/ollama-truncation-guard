@@ -1,0 +1,47 @@
+Demo transcript. Captured from a real run of proxy.py in front of tests/fake_ollama.py.
+Everything listens on 127.0.0.1. The fake counts len(text) // 4 tokens. The proxy estimates len(text) / 6.
+
+=== 1. Upstream silently keeps only 600 prompt tokens ===
+
+# terminal 1
+$ python3 -m tests.fake_ollama --truncate-to 600
+fake Ollama on http://127.0.0.1:11434 truncate_to=600
+
+# terminal 2
+$ python3 proxy.py
+guarding http://127.0.0.1:11434 on http://127.0.0.1:11435
+
+# terminal 3: a 6,000-character prompt at num_ctx 2048, so about 1,000 tokens are expected
+$ python3 -c 'import json; print(json.dumps({"model": "demo", "prompt": "x" * 6000, "stream": False, "options": {"num_ctx": 2048}}))' > request.json
+
+$ curl -s -w '\nHTTP %{http_code}\n' http://127.0.0.1:11435/api/generate -d @request.json
+{"error": "prompt truncation detected; answer refused", "expected_tokens": 1000, "num_ctx": 2048, "prompt_eval_count": 600, "reasons": ["prompt_eval_count 600 is below 0.85 x expected 1000"]}
+HTTP 502
+
+# terminal 2 (proxy stderr)
+REFUSED path=/api/generate expected_tokens=1000 num_ctx=2048 prompt_eval_count=600 reasons="prompt_eval_count 600 is below 0.85 x expected 1000"
+
+=== 2. Same request, honest upstream ===
+
+# terminal 1 (restarted)
+$ python3 -m tests.fake_ollama
+fake Ollama on http://127.0.0.1:11434 truncate_to=None
+
+# terminal 3
+$ curl -s -w '\nHTTP %{http_code}\n' http://127.0.0.1:11435/api/generate -d @request.json
+{"model": "demo", "done": true, "response": "fake answer", "eval_count": 3, "prompt_eval_count": 1500}
+HTTP 200
+
+# terminal 2 (proxy stderr): nothing new, because nothing was refused
+
+=== 3. A prompt that cannot fit is refused before the model is called ===
+
+# terminal 3: 15,000 characters, so at least 2,500 tokens, against num_ctx 2048
+$ python3 -c 'import json; print(json.dumps({"model": "demo", "prompt": "x" * 15000, "stream": False, "options": {"num_ctx": 2048}}))' > big.json
+
+$ curl -s -w '\nHTTP %{http_code}\n' http://127.0.0.1:11435/api/generate -d @big.json
+{"error": "prompt cannot fit; model not called", "expected_tokens": 2500, "num_ctx": 2048, "reasons": ["expected 2500 tokens exceed num_ctx 2048"]}
+HTTP 413
+
+# terminal 2 (proxy stderr)
+REFUSED path=/api/generate expected_tokens=2500 num_ctx=2048 reasons="expected 2500 tokens exceed num_ctx 2048"
