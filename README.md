@@ -139,7 +139,7 @@ The answer is refused when any of these hold.
 
 `num_ctx` comes from the request's `options.num_ctx`, else from `--num-ctx`. If neither is known, the pre-flight, half-window, and window checks are skipped. The proxy does not guess Ollama's own default, because it has changed between versions [Likely].
 
-Ollama's tokenize endpoint is not relied on. Whether a released version offers one is unconfirmed here.
+Ollama's tokenize endpoint is not relied on. On Ollama 0.40.2, `POST /api/tokenize` returned 404.
 
 ## Streaming
 
@@ -211,6 +211,8 @@ To run the two real-server tests against your own Ollama and a small model:
 OLLAMA_URL=http://127.0.0.1:11434 OTG_MODEL=<a small model> python3 -m unittest tests.test_real_ollama -v
 ```
 
+Measured on Ollama 0.40.2 with `qwen2.5:0.5b`, both tests passed. A direct request of about 2,500 tokens at `num_ctx` 512 came back with `prompt_eval_count` 258, about half the window. The same request through the proxy, with `X-Expected-Prompt-Tokens: 500`, was refused with 502 and both reasons.
+
 The line budget is enforced by a gate that counts physical lines, so blanks and comments count:
 
 ```bash
@@ -222,7 +224,7 @@ Measured: `python_lines_excluding_tests=197 max=199 files=2` (`guard.py` 52 line
 ## Limits
 
 - **The estimate is a ratio, not a tokenizer.** Code, non-English text, and base64 tokenise very differently from prose. Send `X-Expected-Prompt-Tokens` when you need an exact count.
-- **Prompt caching may cause false positives [Guessing].** Ollama reuses its cache for a shared prompt prefix. In some versions `prompt_eval_count` may then count only newly evaluated tokens. A long multi-turn chat could then look truncated. This has not been measured yet. `--tolerance 0` turns the ratio check off if it bites.
+- **Prompt caching could cause false positives.** Ollama reuses its cache for a shared prompt prefix. If `prompt_eval_count` then counted only new tokens, a long multi-turn chat could look truncated. On Ollama 0.40.2 with `qwen2.5:0.5b`, the same prompt sent twice reported 330 tokens both times. Other versions and multi-turn chats are not measured. `--tolerance 0` turns the ratio check off if it bites.
 - **Not everything is counted.** Images, tool schemas, and `format` JSON schemas are not counted.
 - **Only two paths are guarded.** `/api/generate` and `/api/chat`. The OpenAI-compatible `/v1/*` endpoints are not supported and are forwarded unchecked.
 - **Localhost only.** There is no authentication and no TLS. Do not expose it beyond your own machine.
