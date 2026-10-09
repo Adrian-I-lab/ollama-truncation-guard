@@ -1,0 +1,29 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.12"]
+    steps:
+      - uses: actions/checkout@PIN_ME_CHECKOUT_SHA # pin to full SHA of the current major
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@PIN_ME_SETUP_PYTHON_SHA # pin to full SHA of the current major
+        with:
+          python-version: ${{ matrix.python-version }}
+      # No dependency install step. The project has zero dependencies.
+      # tests/test_real_ollama.py skips itself because OLLAMA_URL is not set here.
+      - name: Unit and end-to-end tests (fake Ollama)
+        run: python -m unittest discover -s tests -v
+      - name: Line-count gate
+        run: bash scripts/check_lines.sh
