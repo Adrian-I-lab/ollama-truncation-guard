@@ -12,7 +12,7 @@ On a local GPU server, a 120B open-weights model was served by Ollama with `num_
 
 There was no error. There was no warning in the API response. The model answered fluently and confidently from the part of the prompt it kept.
 
-The likely cause is llama.cpp's context shift, which keeps a head and roughly half the window when the input overflows [Likely]. Whatever the cause, `prompt_eval_count` is the only signal the API gives. So this proxy checks it, at the one place every request passes through.
+The likely cause is llama.cpp's context shift, which keeps a head and roughly half the window when the input overflows. Whatever the cause, `prompt_eval_count` is the only signal the API gives. So this proxy checks it, at the one place every request passes through.
 
 ## How it works
 
@@ -59,7 +59,7 @@ curl -s http://127.0.0.1:11435/api/generate \
   -d '{"model": "<your model>", "prompt": "Why is the sky blue?", "stream": false}'
 ```
 
-To guard an existing client, change only its base URL from `http://127.0.0.1:11434` to `http://127.0.0.1:11435`. For example, many clients read `OLLAMA_HOST` [Likely]:
+To guard an existing client, change only its base URL from `http://127.0.0.1:11434` to `http://127.0.0.1:11435`. Clients that read `OLLAMA_HOST`, such as the `ollama` command-line tool, can be pointed at it like this:
 
 ```bash
 OLLAMA_HOST=http://127.0.0.1:11435 <your client>
@@ -128,7 +128,7 @@ REFUSED path=/api/generate expected_tokens=1500 num_ctx=2048 prompt_eval_count=1
 The proxy needs a number to compare against. It takes the best one it has.
 
 1. **The header, exact.** `X-Expected-Prompt-Tokens` comes from a client that ran the model's own tokenizer. It is trusted as given.
-2. **An estimate, deliberately low.** Otherwise the proxy divides the prompt length in characters by 6. English prose runs nearer 4 characters per token [Likely], so dividing by 6 under-counts on purpose. The estimate is a lower bound, so estimation error alone should not make an honest prose prompt look truncated. For `/api/generate` the text counted is `system` plus `prompt`. For `/api/chat` it is every message's `content`. The chat template adds tokens on top, which only makes the bound safer.
+2. **An estimate, deliberately low.** Otherwise the proxy divides the prompt length in characters by 6. English prose typically runs nearer 4 characters per token, so dividing by 6 under-counts on purpose. The estimate is a lower bound, so estimation error alone should not make an honest prose prompt look truncated. For `/api/generate` the text counted is `system` plus `prompt`. For `/api/chat` it is every message's `content`. The chat template adds tokens on top, which only makes the bound safer.
 
 The answer is refused when any of these hold.
 
@@ -137,13 +137,13 @@ The answer is refused when any of these hold.
 - **Count exceeds the window.** `prompt_eval_count` is larger than `num_ctx`. That is impossible, so the response cannot be trusted.
 - **Missing count.** `prompt_eval_count` is absent, for example when a stream is cut before its final line. Truncation cannot then be ruled out.
 
-`num_ctx` comes from the request's `options.num_ctx`, else from `--num-ctx`. If neither is known, the pre-flight, half-window, and window checks are skipped. The proxy does not guess Ollama's own default, because it has changed between versions [Likely].
+`num_ctx` comes from the request's `options.num_ctx`, else from `--num-ctx`. If neither is known, the pre-flight, half-window, and window checks are skipped. The proxy does not guess Ollama's own default, because it has changed between Ollama versions.
 
 Ollama's tokenize endpoint is not relied on. On Ollama 0.40.2, `POST /api/tokenize` returned 404.
 
 ## Streaming
 
-Ollama streams by default. It sends newline-delimited JSON and reports `prompt_eval_count` only in the final line, the one with `"done": true` [Likely]. So a streamed answer cannot be judged until it has finished.
+Ollama streams by default. It sends newline-delimited JSON and reports `prompt_eval_count` only in the final line, the one with `"done": true`. So a streamed answer cannot be judged until it has finished.
 
 - **`buffer` (default, safe).** The proxy reads the whole stream, checks the final line, and then replays every line to the client. The client sees the same wire format, only later. A truncated answer never reaches the client. It gets a 502 instead.
 - **`passthrough` (low latency).** Lines go to the client as they arrive. Only the final line is held back. If the check fails, that line is replaced with an error line that also carries `"done": true` and both numbers. The client has already seen partial text, so this mode **detects** truncation but cannot **prevent** it. The HTTP status is already 200 by then.
